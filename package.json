@@ -3,13 +3,18 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
-  "type": "module",
   "scripts": {
-    "start": "node --env-file=.env src/index.js"
+    "start": "node -r ts-node/register --env-file=.env src/index.ts"
   },
   "author": "",
   "description": "",
   "dependencies": {
-    "openai": "^4.31.0"
+    "openai": "^4.31.0",
+    "tiktoken": "^1.0.13"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.3"
   }
 }
