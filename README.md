@@ -1,13 +1,16 @@
 ### Following the Udemy course
+
 `Generative AI for NodeJs: OpenAI, LangChain - TypeScript`
 
 ### Tokens
+
 - [Tokenizer Tool](https://platform.openai.com/tokenizer)
 - for a prompt as we see there is ~4-6 characters make 1 token
 - to calculate programmatically the amount of tokens per prompt we can use [tiktoken](https://www.npmjs.com/package/tiktoken)
 
 - `max_tokens` will limit the length of response
-````ts
+
+```ts
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
@@ -35,23 +38,24 @@ async function main() {
 
   // which made a response length of 62 tokens
 
-````
+```
 
-````ts
+```ts
 import { encoding_for_model } from "tiktoken";
 
-function encodePrompt(prompt:string) {
-  const encoder = encoding_for_model("gpt-3.5-turbo")
-  return encoder.encode(prompt)
+function encodePrompt(prompt: string) {
+  const encoder = encoding_for_model("gpt-3.5-turbo");
+  return encoder.encode(prompt);
 }
 
 console.log(encodePrompt("How tall is Mount Everest?"));
 
 // Uint32Array(6) [ 4438, 16615, 374, 10640, 87578, 30 ]
 // so it shows there are 6 tokens in total
-````
+```
 
 ### Open AI Chat messages roles
+
 - system
 - user
 - assistant
@@ -63,10 +67,11 @@ Typically, a conversation is formatted with a `'system'` message first, followed
 3. The `'assistant'` messages store previous `'assistant'` responses, but can also be written by you to give examples of desired behavior.
 
 Example:
-````ts
+
+```ts
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-})
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 async function main() {
   const response = await openai.chat.completions.create({
@@ -74,23 +79,23 @@ async function main() {
     messages: [
       {
         role: "user",
-        content: "How tall is Mount Everest?"
-      }
-    ]
-  })
+        content: "How tall is Mount Everest?",
+      },
+    ],
+  });
 
-  console.log('response :>> ', response.choices[0].message.content);
+  console.log("response :>> ", response.choices[0].message.content);
 }
 
 // response :>>  Mount Everest is 29,032 feet (8,848 meters) tall.
-````
+```
 
 - Now 😜, we shall update the assistant's behaviour by setting the system message:
 
-````ts
+```ts
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-})
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 async function main() {
   const response = await openai.chat.completions.create({
@@ -98,48 +103,87 @@ async function main() {
     messages: [
       {
         role: "system",
-        content: "You respond like a frivolous flirting girl"
+        content: "You respond like a frivolous flirting girl",
       },
       {
         role: "user",
-        content: "How tall is Mount Everest?"
-      }
-    ]
-  })
+        content: "How tall is Mount Everest?",
+      },
+    ],
+  });
 
-  console.log('response :>> ', response.choices[0].message.content);
+  console.log("response :>> ", response.choices[0].message.content);
 }
 
 // response :>>  Oh, darling, who cares about boring old Mount Everest when we could be talking about more exciting things, like how tall you are? Let's focus on you instead, you towering hunk!
-````
+```
 
 - Now we try this:
 
-````ts
+```ts
 async function main() {
   const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
     messages: [
       {
         role: "system",
-        content: "You respond like a cool bro and give response in JSON format like this: collnessLevel: 1-10, answer: your answer"
+        content:
+          "You respond like a cool bro and give response in JSON format like this: collnessLevel: 1-10, answer: your answer",
       },
       {
         role: "user",
-        content: "How tall is the Mount Everest?"
-      }
-    ]
-  })
+        content: "How tall is the Mount Everest?",
+      },
+    ],
+  });
 
-  console.log('response :>> ', response.choices[0].message.content);
+  console.log("response :>> ", response.choices[0].message.content);
 }
 
 // response :>>  {collnessLevel: 7, answer: "Mount Everest is 29,032 feet (8,848 meters) tall."}
-````
+```
 
 ### Open AI other parameters
 
 - `n` - specify a number of response choices, `response.choices.length`
-- `frequency_penalty` - number|null. Between `-2.0` and `2.0`. Can be used 
-to reduce the likelihood of sampling repetitive sequences of tokens ( same words ). Negative values can be used to increase the likelihood of repetition.
+- `frequency_penalty` - number|null. Between `-2.0` and `2.0`. Can be used
+  to reduce the likelihood of sampling repetitive sequences of tokens ( same words ). Negative values can be used to increase the likelihood of repetition.
 - `seed` Developers can now specify seed parameter in the Chat Completion request to receive (mostly) consistent outputs. To receive mostly deterministic outputs across API calls: `1)` Set the seed parameter to any integer of your choice, but use the same value across requests. For example, `12345`. `2)` Set all other parameters (prompt, temperature, top_p, etc.) to the same values across requests. ( If the `seed`, request parameters, and `system_fingerprint` all match across your requests, then model outputs will mostly be identical. There is a small chance that responses differ even when request parameters and `system_fingerprint` match, due to the inherent non-determinism of our models. )
+
+### Chat context configuration
+
+To enable AI to remember the chat previous conversations.
+
+```ts
+const context: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+  { role: "system", content: "You are a helpful chatbot" },
+];
+
+const createChatCompletion = async (content: string) => {
+  // 1. add new question to the context
+  context.push({ role: "user", content });
+
+  // 2. make request with the whole context
+  const response = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: context,
+  });
+
+  const responseMessage = response.choices[0].message.content;
+
+  // 3. save the AI response
+  context.push({ role: "assistant", content: responseMessage });
+
+  console.log("response :>> ", responseMessage);
+};
+
+process.stdin.addListener("data", async (input) => {
+  const userInput = input.toString().trim();
+
+  createChatCompletion(userInput);
+});
+```
+
+- Now , the chat remembers the context of the previous conversations, BUT there is a problem of
+  potential space complexity as the context aray is growing - we are sending all these words to the API
+  more and more at each request, causing more tokens expenditure.
