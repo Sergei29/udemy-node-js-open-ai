@@ -15,12 +15,15 @@ async function main() {
       },
       {
         role: "user",
-        content: "How tall is the Mount Everest?"
+        content: "What is the Witcher 3 Wild Hunt?"
       }
-    ]
+    ],
+    max_tokens: 100,
+    seed: 12345
   })
 
   console.log('response :>> ', response.choices[0].message.content);
+  console.log('response.system_fingerprint :>> ', response.system_fingerprint);
 }
 
 function encodePrompt(prompt:string) {
