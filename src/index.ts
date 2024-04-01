@@ -8,14 +8,24 @@ const getTimeOfTheDay = () => {
   return new Date().toTimeString();
 };
 
+const getOrderStatus = (orderId: string) => {
+  console.log(`Getting the status of order: ${orderId}...`);
+
+  if (parseInt(orderId) % 2 === 0) {
+    return "IN PROGRESS";
+  }
+
+  return "COMPLETED";
+};
+
 const callOpenAIWithTools = async () => {
   const context: OpenAI.Chat.ChatCompletionMessageParam[] = [
     {
       role: "system",
       content:
-        "You are a helpful assistant that gives information about the current time, date and location",
+        "You are a helpful assistant that gives information about the current time, date, location and also the order status",
     },
-    { role: "user", content: "What is the time now?" },
+    { role: "user", content: "What is the status of order 1234 ?" },
   ];
 
   // 1. 1st call, attempt to get the real-time info
@@ -28,6 +38,23 @@ const callOpenAIWithTools = async () => {
         function: {
           name: "getTimeOfTheDay",
           description: "Get the current time",
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "getOrderStatus",
+          description: "Get the order status by order id",
+          parameters: {
+            type: "object",
+            properties: {
+              orderId: {
+                type: "string",
+                description: "the id of the order to get the status of",
+              },
+            },
+            required: ["orderId"],
+          },
         },
       },
     ],
@@ -43,6 +70,7 @@ const callOpenAIWithTools = async () => {
 
   if (toolToCall && toolToCall.function.name === "getTimeOfTheDay") {
     const toolResponse = getTimeOfTheDay();
+
     context.push(response.choices[0].message);
     context.push({
       role: "tool",
@@ -51,7 +79,21 @@ const callOpenAIWithTools = async () => {
     });
   }
 
-  const secondResponse = await await openai.chat.completions.create({
+  if (toolToCall && toolToCall.function.name === "getOrderStatus") {
+    const rawArgument = toolToCall.function.arguments;
+    const parsedArgs = JSON.parse(rawArgument) as { orderId: string };
+
+    const toolResponse = getOrderStatus(parsedArgs.orderId);
+
+    context.push(response.choices[0].message);
+    context.push({
+      role: "tool",
+      tool_call_id: toolToCall.id,
+      content: toolResponse,
+    });
+  }
+
+  const secondResponse = await openai.chat.completions.create({
     model: "gpt-3.5-turbo-0613",
     messages: context,
     tools: [
