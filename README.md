@@ -187,3 +187,94 @@ process.stdin.addListener("data", async (input) => {
 - Now , the chat remembers the context of the previous conversations, BUT there is a problem of
   potential space complexity as the context aray is growing - we are sending all these words to the API
   more and more at each request, causing more tokens expenditure.
+- see the branch `section-3-basic-chat-app` where the logic implemented for context has sliced out the older messages if the y exceed for eample 700 tokens.
+
+### Open AI Tools
+
+Because ChatGPT cannot access the real time, so the kind of questions like `'What is the date/ time today ?'` or `'how is the weather outside ?'` will not work if we use ChatGPT only by itself - however, there are the OpenAI tools that can
+plug the ChatGPT to other data sources for example. The Open AI tools allow the ChatGPT models to invoke all kind of functions:
+
+- functions to access real time data,
+- functions to modify data
+- functions to all kind of other stuff...
+
+how do we use these tools ?
+
+- setup the tool,
+- define the tool parameters
+- use multiple tools
+
+basic implementation of a current time tool for example:
+
+```ts
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const getTimeOfTheDay = () => {
+  return new Date().toTimeString();
+};
+
+const callOpenAIWithTools = async () => {
+  const context: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content:
+        "You are a helpful assistant that gives information about the current time, date and location",
+    },
+    { role: "user", content: "What is the time now?" },
+  ];
+
+  // 1. 1st call, attempt to get the real-time info
+  const response = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo-0613",
+    messages: context,
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "getTimeOfTheDay",
+          description: "Get the current time",
+        },
+      },
+    ],
+    tool_choice: "auto", // the engine will decide which tool to use
+  });
+
+  // 2. decide if the tool call is required:
+  const isToolRequired = response.choices[0].finish_reason === "tool_calls";
+  const toolToCall =
+    isToolRequired && response.choices[0].message.tool_calls?.length
+      ? response.choices[0].message.tool_calls[0]
+      : null;
+
+  // 2.1 add tool provided data to the chat context
+  if (toolToCall && toolToCall.function.name === "getTimeOfTheDay") {
+    const toolResponse = getTimeOfTheDay();
+    context.push(response.choices[0].message);
+    context.push({
+      role: "tool",
+      tool_call_id: toolToCall.id,
+      content: toolResponse,
+    });
+  }
+
+  // 3. make another call with tool response provided
+  const secondResponse = await await openai.chat.completions.create({
+    model: "gpt-3.5-turbo-0613",
+    messages: context,
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "getTimeOfTheDay",
+          description: "Get the current time",
+        },
+      },
+    ],
+    tool_choice: "auto", // the engine will decide which tool to use
+  });
+
+  console.log("response :>> ", secondResponse.choices[0].message.content);
+};
+```
