@@ -4,87 +4,103 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const getTimeOfTheDay = () => {
-  return new Date().toTimeString();
-};
+/**
+ * 1. configure dialog with a context
+ * 2. configure 2 tools:
+ *    - tool search for available flights
+ *    - tool for reservation of the selected flight
+ */
 
-const getOrderStatus = (orderId: string) => {
-  console.log(`Getting the status of order: ${orderId}...`);
+const context: OpenAI.Chat.ChatCompletionMessageParam[] = [
+  {
+    role: "system",
+    content:
+      "You are a helpful assistant acting as an airline flights booking agent",
+  },
+];
 
-  if (parseInt(orderId) % 2 === 0) {
-    return "IN PROGRESS";
-  }
-
-  return "COMPLETED";
-};
-
-const callOpenAIWithTools = async () => {
-  const context: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    {
-      role: "system",
-      content:
-        "You are a helpful assistant that gives information about the current time, date, location and also the order status",
-    },
-    { role: "user", content: "What is the status of order 1234 ?" },
+const getAvailableFlights = () => {
+  const flightList = [
+    ["FR 1234", "BA 223T"],
+    ["PA 3332", "ZX 2323"],
+    ["ZX 23TT", "QE 1234"],
+    ["BB D012", "YR IY12"],
+    ["RT 2211", "AA IO22"],
   ];
 
-  // 1. 1st call, attempt to get the real-time info
-  const response = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo-0613",
-    messages: context,
-    tools: [
-      {
-        type: "function",
-        function: {
-          name: "getTimeOfTheDay",
-          description: "Get the current time",
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "getOrderStatus",
-          description: "Get the order status by order id",
-          parameters: {
-            type: "object",
-            properties: {
-              orderId: {
-                type: "string",
-                description: "the id of the order to get the status of",
-              },
-            },
-            required: ["orderId"],
+  return flightList[Math.floor(Math.random() * flightList.length)];
+};
+
+const reserveTheFlight = (flightId: string) => {
+  return `You have reserved flight "${flightId}"`;
+};
+
+const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "getAvailableFlights",
+      description: "get avaliable flights list for today",
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reserveTheFlight",
+      description: "makes flight reservation based on flight id provided",
+      parameters: {
+        type: "object",
+        properties: {
+          flightId: {
+            type: "string",
+            description: "the id of the flight to be reserved",
           },
         },
+        required: ["flightId"],
       },
-    ],
-    tool_choice: "auto", // the engine will decide which tool to use
+    },
+  },
+];
+
+const createChatCompletion = async (content: string) => {
+  context.push({ role: "user", content });
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: context,
+    tools,
+    tool_choice: "auto",
   });
 
-  // 2. decide if the tool call is required:
   const isToolRequired = response.choices[0].finish_reason === "tool_calls";
-  const toolToCall =
-    isToolRequired && response.choices[0].message.tool_calls?.length
-      ? response.choices[0].message.tool_calls[0]
-      : null;
 
-  if (toolToCall && toolToCall.function.name === "getTimeOfTheDay") {
-    const toolResponse = getTimeOfTheDay();
+  if (!isToolRequired) {
+    const responseMessage = response.choices[0].message.content;
+    context.push({ role: "assistant", content: responseMessage });
+    console.log("response :>> ", responseMessage);
 
+    return;
+  }
+
+  const toolToCall = response.choices[0].message.tool_calls?.length
+    ? response.choices[0].message.tool_calls[0]
+    : null;
+
+  if (toolToCall && toolToCall.function.name === "getAvailableFlights") {
+    const toolResponse = getAvailableFlights();
     context.push(response.choices[0].message);
     context.push({
       role: "tool",
       tool_call_id: toolToCall.id,
-      content: toolResponse,
+      content: toolResponse.join(", "),
     });
   }
 
-  if (toolToCall && toolToCall.function.name === "getOrderStatus") {
-    const rawArgument = toolToCall.function.arguments;
-    const parsedArgs = JSON.parse(rawArgument) as { orderId: string };
-
-    const toolResponse = getOrderStatus(parsedArgs.orderId);
-
+  if (toolToCall && toolToCall.function.name === "reserveTheFlight") {
+    const args = JSON.parse(toolToCall.function.arguments) as {
+      flightId: string;
+    };
+    const toolResponse = reserveTheFlight(args.flightId);
     context.push(response.choices[0].message);
     context.push({
       role: "tool",
@@ -96,19 +112,15 @@ const callOpenAIWithTools = async () => {
   const secondResponse = await openai.chat.completions.create({
     model: "gpt-3.5-turbo-0613",
     messages: context,
-    tools: [
-      {
-        type: "function",
-        function: {
-          name: "getTimeOfTheDay",
-          description: "Get the current time",
-        },
-      },
-    ],
+    tools,
     tool_choice: "auto", // the engine will decide which tool to use
   });
 
   console.log("response :>> ", secondResponse.choices[0].message.content);
 };
 
-callOpenAIWithTools();
+process.stdin.addListener("data", async (input) => {
+  const userInput = input.toString().trim();
+
+  createChatCompletion(userInput);
+});
